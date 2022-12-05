@@ -1,15 +1,36 @@
-FROM node:8.11.3
+FROM debian:bullseye as builder
 
-# Create app directory
-RUN mkdir -p /app
+ARG NODE_VERSION=12.22.5
+
+RUN apt-get update; apt install -y curl
+RUN curl https://get.volta.sh | bash
+ENV VOLTA_HOME /root/.volta
+ENV PATH /root/.volta/bin:$PATH
+RUN volta install node@${NODE_VERSION}
+
+#######################################################################
+
+RUN mkdir /app
 WORKDIR /app
 
-# Install app dependencies
-COPY package.json /app/
+# NPM will not install any package listed in "devDependencies" when NODE_ENV is set to "production",
+# to install all modules: "npm install --production=false".
+# Ref: https://docs.npmjs.com/cli/v9/commands/npm-install#description
+
+ENV NODE_ENV production
+
+COPY . .
+
 RUN npm install
+FROM debian:bullseye
 
-# Bundle app source
-COPY . /app
+LABEL fly_launch_runtime="nodejs"
 
-EXPOSE 3000
-CMD [ "npm", "start" ]
+COPY --from=builder /root/.volta /root/.volta
+COPY --from=builder /app /app
+
+WORKDIR /app
+ENV NODE_ENV production
+ENV PATH /root/.volta/bin:$PATH
+
+CMD [ "npm", "run", "start" ]
